@@ -1,3 +1,0 @@
-## HP Email Attachment Workflow - Dependencies
-## Python 3.7+ required (uses imaplib and email from stdlib)
-## No external dependencies needed - uses only Python standard library
