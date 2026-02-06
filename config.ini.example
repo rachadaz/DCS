@@ -16,11 +16,11 @@ hp_sender = hp-scanner@example.com, noreply@hp.com
 mailbox = INBOX
 
 [storage]
-# Chemin du share reseau (mount point local)
+# Chemin du share reseau
 # Exemples:
-#   Linux avec montage CIFS : /mnt/share/scans
-#   Linux avec montage NFS  : /mnt/nfs/scans
-share_path = /mnt/share/scans
+#   Chemin UNC   : \\SERVEUR\partage\scans
+#   Lecteur mappe : S:\scans
+share_path = \\SERVEUR\partage\scans
 
 # Organiser les fichiers par date (true/false)
 organize_by_date = true
@@ -46,4 +46,4 @@ allowed_extensions = .pdf, .jpg, .jpeg, .png, .tiff, .tif
 log_level = INFO
 
 # Fichier de log
-log_file = /var/log/hp-email-attachment/hp_email_attachment.log
+log_file = C:\ProgramData\hp-email-attachment\hp_email_attachment.log

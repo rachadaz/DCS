@@ -5,8 +5,10 @@ HP Email Attachment Workflow
 Recupere les emails envoyes par un scanner/imprimante HP,
 extrait les pieces jointes et les enregistre sur un share reseau.
 
+Concu pour tourner sur un poste Windows avec le Planificateur de taches.
+
 Usage:
-    python3 hp_email_attachment.py [--config CONFIG_PATH] [--dry-run]
+    python hp_email_attachment.py [--config CONFIG_PATH] [--dry-run]
 """
 
 import argparse
@@ -17,10 +19,8 @@ import logging
 import os
 import re
 import sys
-import time
 from datetime import datetime
 from email.header import decode_header
-from pathlib import Path
 
 
 def setup_logging(config):
@@ -342,10 +342,12 @@ def main():
     parser = argparse.ArgumentParser(
         description="Recupere les pieces jointes des emails HP et les enregistre sur un share reseau."
     )
+    # Chemin par defaut : a cote du script
+    default_config = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.ini")
     parser.add_argument(
         "--config", "-c",
-        default="/etc/hp-email-attachment/config.ini",
-        help="Chemin vers le fichier de configuration (defaut: /etc/hp-email-attachment/config.ini)"
+        default=default_config,
+        help="Chemin vers le fichier de configuration (defaut: config.ini a cote du script)"
     )
     parser.add_argument(
         "--dry-run", "-n",

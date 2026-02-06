@@ -1,13 +1,15 @@
 # HP Email Attachment Workflow
 
-Script Python qui recupere automatiquement les pieces jointes des emails envoyes par un scanner/imprimante HP et les enregistre sur un partage reseau (share).
+Script Python qui recupere automatiquement les pieces jointes des emails envoyes par un scanner/imprimante HP et les enregistre sur un partage reseau (share Windows).
+
+Concu pour tourner sur un **poste Windows** via le **Planificateur de taches**.
 
 ## Architecture
 
 ```
-Mail HP (scanner) --> Serveur IMAP --> Script Python --> Share reseau (/mnt/share/scans)
+Mail HP (scanner) --> Serveur IMAP --> Script Python --> Share reseau (\\SERVEUR\partage\scans)
                                            |
-                                     systemd timer (toutes les 5 min)
+                                  Planificateur de taches (toutes les 5 min)
 ```
 
 ## Fichiers
@@ -16,129 +18,130 @@ Mail HP (scanner) --> Serveur IMAP --> Script Python --> Share reseau (/mnt/shar
 |---|---|
 | `hp_email_attachment.py` | Script principal |
 | `config.ini.example` | Modele de configuration |
-| `systemd/hp-email-attachment.service` | Service systemd (oneshot) |
-| `systemd/hp-email-attachment.timer` | Timer systemd (planification) |
-| `install.sh` | Script d'installation automatique |
+| `install.ps1` | Script d'installation PowerShell (cree la tache planifiee) |
+| `uninstall.ps1` | Script de desinstallation |
 
 ## Prerequis
 
-- Python 3.7+ (aucune dependance externe, uniquement la stdlib)
+- **Windows 10/11** ou **Windows Server 2016+**
+- **Python 3.7+** installe et dans le PATH (aucune dependance externe, uniquement la stdlib)
 - Acces IMAP a la boite mail recevant les scans HP
-- Un partage reseau monte localement (CIFS/SMB ou NFS)
+- Acces en ecriture au share reseau (chemin UNC ou lecteur mappe)
 
 ## Installation rapide
 
-```bash
-sudo ./install.sh
-```
-
-Puis editez la configuration :
-
-```bash
-sudo nano /etc/hp-email-attachment/config.ini
-```
+1. Ouvrir **PowerShell en Administrateur**
+2. Se placer dans le dossier du projet :
+   ```powershell
+   cd C:\chemin\vers\DCS
+   ```
+3. Lancer l'installation :
+   ```powershell
+   .\install.ps1
+   ```
+4. Editer la configuration :
+   ```powershell
+   notepad "C:\ProgramData\hp-email-attachment\config.ini"
+   ```
 
 ## Installation manuelle
 
-### 1. Monter le share reseau
+### 1. Installer Python
 
-#### Option A : Montage CIFS/SMB (Windows Share)
-
-```bash
-# Installer cifs-utils
-sudo apt install cifs-utils
-
-# Creer le point de montage
-sudo mkdir -p /mnt/share/scans
-
-# Creer le fichier de credentials (plus securise)
-sudo bash -c 'cat > /etc/samba/hp-credentials << EOF
-username=VOTRE_USER
-password=VOTRE_MOT_DE_PASSE
-domain=VOTRE_DOMAINE
-EOF'
-sudo chmod 600 /etc/samba/hp-credentials
-
-# Ajouter dans /etc/fstab pour montage automatique
-# //SERVEUR/partage  /mnt/share/scans  cifs  credentials=/etc/samba/hp-credentials,uid=hp-email,gid=hp-email,file_mode=0660,dir_mode=0770  0  0
-
-# Monter
-sudo mount -a
-```
-
-#### Option B : Montage NFS
-
-```bash
-sudo apt install nfs-common
-sudo mkdir -p /mnt/share/scans
-
-# Ajouter dans /etc/fstab
-# serveur:/export/scans  /mnt/share/scans  nfs  defaults  0  0
-
-sudo mount -a
-```
+Telecharger Python 3 depuis [python.org](https://www.python.org/downloads/) et cocher **"Add Python to PATH"** lors de l'installation.
 
 ### 2. Configurer
 
-```bash
-sudo mkdir -p /etc/hp-email-attachment
-sudo cp config.ini.example /etc/hp-email-attachment/config.ini
-sudo chmod 600 /etc/hp-email-attachment/config.ini
-sudo nano /etc/hp-email-attachment/config.ini
+Copier `config.ini.example` et le renommer en `config.ini` a cote du script, puis editer :
+
+```ini
+[email]
+imap_server = imap.votre-serveur.com
+imap_port = 993
+use_ssl = true
+username = scanner@votre-domaine.com
+password = VotreMotDePasse
+hp_sender = hp-scanner@votre-domaine.com
+mailbox = INBOX
+
+[storage]
+share_path = \\SERVEUR\partage\scans
+organize_by_date = true
+
+[processing]
+mark_as_read = true
+move_to_folder = Processed
+allowed_extensions = .pdf, .jpg, .jpeg, .png, .tiff, .tif
+
+[logging]
+log_level = INFO
+log_file = C:\ProgramData\hp-email-attachment\hp_email_attachment.log
 ```
 
-Parametres importants a configurer :
-- `imap_server` : adresse du serveur mail
+Parametres importants :
+- `imap_server` : adresse du serveur mail (Exchange, Gmail, etc.)
 - `username` / `password` : identifiants de la boite mail
-- `hp_sender` : adresse(s) email du scanner HP
-- `share_path` : chemin local du share monte
+- `hp_sender` : adresse(s) email du scanner HP (separees par des virgules)
+- `share_path` : chemin UNC du share (`\\SERVEUR\dossier`) ou lecteur mappe (`S:\scans`)
 
 ### 3. Tester
 
-```bash
+```powershell
 # Mode dry-run (simulation, aucune modification)
-python3 hp_email_attachment.py --config /etc/hp-email-attachment/config.ini --dry-run
+python hp_email_attachment.py --config config.ini --dry-run
 
 # Execution reelle
-python3 hp_email_attachment.py --config /etc/hp-email-attachment/config.ini
+python hp_email_attachment.py --config config.ini
 ```
 
-### 4. Automatiser avec systemd
+### 4. Automatiser avec le Planificateur de taches
 
-```bash
-sudo cp systemd/hp-email-attachment.service /etc/systemd/system/
-sudo cp systemd/hp-email-attachment.timer /etc/systemd/system/
+#### Option A : Via le script install.ps1 (recommande)
 
-# Adapter ReadWritePaths dans le .service si votre share est ailleurs que /mnt/share/scans
+```powershell
+# Installation par defaut (toutes les 5 minutes)
+.\install.ps1
 
-sudo systemctl daemon-reload
-sudo systemctl enable --now hp-email-attachment.timer
+# Personnaliser l'intervalle (ex: toutes les 2 minutes)
+.\install.ps1 -IntervalMinutes 2
 ```
 
-### Alternative : Automatiser avec cron
+#### Option B : Manuellement
 
-```bash
-# Toutes les 5 minutes
-*/5 * * * * /usr/bin/python3 /opt/hp-email-attachment/hp_email_attachment.py --config /etc/hp-email-attachment/config.ini >> /var/log/hp-email-attachment/cron.log 2>&1
-```
+1. Ouvrir le **Planificateur de taches** (`taskschd.msc`)
+2. Cliquer **Creer une tache...**
+3. Onglet **General** :
+   - Nom : `HP Email Attachment Workflow`
+   - Cocher : Executer meme si l'utilisateur n'est pas connecte
+   - Cocher : Executer avec les autorisations maximales
+4. Onglet **Declencheurs** :
+   - Nouveau > Repeter la tache toutes les **5 minutes** pendant **indefiniment**
+5. Onglet **Actions** :
+   - Nouveau > Demarrer un programme
+   - Programme : `python`
+   - Arguments : `"C:\Program Files\hp-email-attachment\hp_email_attachment.py" --config "C:\ProgramData\hp-email-attachment\config.ini"`
+6. Onglet **Conditions** :
+   - Decocher : Demarrer la tache uniquement si l'ordinateur est sur secteur
+7. Onglet **Parametres** :
+   - Cocher : Autoriser l'execution de la tache a la demande
 
 ## Utilisation
 
-```bash
+```powershell
 # Lancer manuellement
-python3 hp_email_attachment.py -c /etc/hp-email-attachment/config.ini
+python hp_email_attachment.py -c config.ini
 
-# Mode simulation
-python3 hp_email_attachment.py -c /etc/hp-email-attachment/config.ini --dry-run
+# Mode simulation (dry-run)
+python hp_email_attachment.py -c config.ini --dry-run
 
-# Verifier le statut du timer
-systemctl status hp-email-attachment.timer
+# Verifier la tache planifiee
+Get-ScheduledTask -TaskName "HP Email Attachment Workflow" | Format-List
 
-# Voir les logs systemd
-journalctl -u hp-email-attachment.service -f
+# Lancer la tache manuellement depuis le planificateur
+Start-ScheduledTask -TaskName "HP Email Attachment Workflow"
 
-# Lancer manuellement via systemd
-sudo systemctl start hp-email-attachment.service
+# Voir les logs
+Get-Content "C:\ProgramData\hp-email-attachment\hp_email_attachment.log" -Tail 50
 ```
 
 ## Structure des fichiers sauvegardes
@@ -146,23 +149,34 @@ sudo systemctl start hp-email-attachment.service
 Avec `organize_by_date = true` :
 
 ```
-/mnt/share/scans/
-  2026/
-    02/
-      06/
+\\SERVEUR\partage\scans\
+  2026\
+    02\
+      06\
         scan_001.pdf
         scan_002.pdf
-    02/
-      07/
+      07\
         document.pdf
+```
+
+## Desinstallation
+
+```powershell
+# Desinstaller (supprime tout)
+.\uninstall.ps1
+
+# Desinstaller en conservant la configuration
+.\uninstall.ps1 -KeepConfig
 ```
 
 ## Depannage
 
 | Probleme | Solution |
 |---|---|
-| `Connexion refusee` | Verifier `imap_server` et `imap_port`. Tester avec `openssl s_client -connect serveur:993` |
+| `Python non trouve` | Reinstaller Python 3 en cochant "Add to PATH", ou ajouter manuellement au PATH systeme |
+| `Connexion refusee` | Verifier `imap_server` et `imap_port` dans config.ini |
 | `Login failed` | Verifier `username` et `password`. Pour Gmail/O365, utiliser un mot de passe d'application |
-| `Share non accessible` | Verifier le montage avec `mount \| grep share` et les permissions avec `ls -la /mnt/share/scans` |
-| `Aucun mail trouve` | Verifier `hp_sender` (adresse exacte). Tester avec `mark_as_read = false` |
-| `Permission denied` | Verifier que l'utilisateur `hp-email` a les droits sur le share et le dossier de logs |
+| `Share non accessible` | Tester avec `dir \\SERVEUR\partage\scans` dans un terminal. Verifier les droits reseau |
+| `Aucun mail trouve` | Verifier `hp_sender` (adresse exacte du scanner). Mettre `mark_as_read = false` pour tester |
+| `Permission denied` | Verifier que le compte executant la tache a les droits sur le share |
+| `Tache ne se lance pas` | Verifier dans le Planificateur de taches > Historique. Relancer `install.ps1` |
