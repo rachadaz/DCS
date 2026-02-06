@@ -1,0 +1,14 @@
+[Unit]
+Description=Timer pour le workflow HP Email Attachment
+Requires=hp-email-attachment.service
+
+[Timer]
+# Executer toutes les 5 minutes
+OnBootSec=2min
+OnUnitActiveSec=5min
+
+# Alternative : executer a heures fixes (decommenter et adapter)
+# OnCalendar=*-*-* 08..18:00/5:00
+
+[Install]
+WantedBy=timers.target

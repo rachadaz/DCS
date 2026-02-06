@@ -1,0 +1,49 @@
+[email]
+# Serveur IMAP (ex: imap.gmail.com, outlook.office365.com, serveur interne)
+imap_server = imap.example.com
+imap_port = 993
+use_ssl = true
+
+# Identifiants de la boite mail
+username = scanner@example.com
+password = MotDePasseIci
+
+# Adresse email de l'expediteur HP (scanner/imprimante)
+# Supporte plusieurs adresses separees par des virgules
+hp_sender = hp-scanner@example.com, noreply@hp.com
+
+# Dossier IMAP a surveiller (generalement INBOX)
+mailbox = INBOX
+
+[storage]
+# Chemin du share reseau (mount point local)
+# Exemples:
+#   Linux avec montage CIFS : /mnt/share/scans
+#   Linux avec montage NFS  : /mnt/nfs/scans
+share_path = /mnt/share/scans
+
+# Organiser les fichiers par date (true/false)
+organize_by_date = true
+
+# Prefixe optionnel pour les fichiers (laisser vide si non souhaite)
+file_prefix =
+
+[processing]
+# Marquer les mails traites comme lus (true/false)
+mark_as_read = true
+
+# Deplacer les mails traites dans un dossier (laisser vide pour ne pas deplacer)
+move_to_folder = Processed
+
+# Supprimer les mails apres traitement (true/false) - ATTENTION
+delete_after_processing = false
+
+# Extensions de pieces jointes a sauvegarder (separees par des virgules, vide = toutes)
+allowed_extensions = .pdf, .jpg, .jpeg, .png, .tiff, .tif
+
+[logging]
+# Niveau de log: DEBUG, INFO, WARNING, ERROR
+log_level = INFO
+
+# Fichier de log
+log_file = /var/log/hp-email-attachment/hp_email_attachment.log
