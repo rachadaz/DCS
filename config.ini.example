@@ -1,16 +1,30 @@
 [email]
-# Serveur IMAP (ex: imap.gmail.com, outlook.office365.com, serveur interne)
-imap_server = imap.example.com
+# Serveur IMAP
+imap_server = outlook.office365.com
 imap_port = 993
 use_ssl = true
 
-# Identifiants de la boite mail
-username = scanner@example.com
-password = MotDePasseIci
+# Adresse email de la boite mail qui recoit les scans
+username = scanner@votre-domaine.com
+
+# --- Methode d'authentification ---
+# "oauth2" pour Microsoft 365 (recommande)
+# "basic" pour login/mot de passe classique (si supporte par votre serveur)
+auth_method = oauth2
+
+# --- Si auth_method = basic ---
+# password = VotreMotDePasse
+
+# --- Si auth_method = oauth2 (Microsoft 365) ---
+# Ces 3 valeurs proviennent de l'inscription de l'application dans Azure AD (Entra ID)
+# Voir README.md section "Configuration Azure AD" pour les obtenir
+tenant_id = xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+client_id = xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+client_secret = votre-client-secret
 
 # Adresse email de l'expediteur HP (scanner/imprimante)
 # Supporte plusieurs adresses separees par des virgules
-hp_sender = hp-scanner@example.com, noreply@hp.com
+hp_sender = hp-scanner@votre-domaine.com, noreply@hp.com
 
 # Dossier IMAP a surveiller (generalement INBOX)
 mailbox = INBOX

@@ -93,13 +93,63 @@ function Write-Log {
 # CLIENT IMAP (via .NET TcpClient + SslStream)
 # ============================================================================
 
+# ============================================================================
+# OAUTH2 (Microsoft 365 / Azure AD)
+# ============================================================================
+
+function Get-OAuth2Token {
+    param(
+        [string]$TenantId,
+        [string]$ClientId,
+        [string]$ClientSecret
+    )
+
+    Write-Log "Demande de token OAuth2 aupres d'Azure AD (tenant: $TenantId) ..."
+
+    $tokenUrl = "https://login.microsoftonline.com/$TenantId/oauth2/v2.0/token"
+
+    $body = @{
+        client_id     = $ClientId
+        client_secret = $ClientSecret
+        scope         = "https://outlook.office365.com/.default"
+        grant_type    = "client_credentials"
+    }
+
+    try {
+        $response = Invoke-RestMethod -Uri $tokenUrl -Method POST -Body $body -ContentType "application/x-www-form-urlencoded"
+        Write-Log "Token OAuth2 obtenu avec succes."
+        return $response.access_token
+    } catch {
+        Write-Log "Erreur lors de la demande de token OAuth2: $_" -Level ERROR
+        throw "OAuth2 token request failed"
+    }
+}
+
+function Build-XOAuth2String {
+    param(
+        [string]$Username,
+        [string]$AccessToken
+    )
+    # Format XOAUTH2 : base64("user=" + user + "\x01auth=Bearer " + token + "\x01\x01")
+    $authString = "user=$Username$([char]1)auth=Bearer $AccessToken$([char]1)$([char]1)"
+    return [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($authString))
+}
+
+# ============================================================================
+# CONNEXION IMAP
+# ============================================================================
+
 function Connect-Imap {
     param(
         [string]$Server,
         [int]$Port,
         [bool]$UseSsl,
         [string]$Username,
-        [string]$Password
+        [string]$Password,
+        [string]$AuthMethod,
+        [string]$TenantId,
+        [string]$ClientId,
+        [string]$ClientSecret
     )
 
     Write-Log "Connexion au serveur IMAP ${Server}:${Port} ..."
@@ -132,11 +182,24 @@ function Connect-Imap {
         TagId     = 1
     }
 
-    # Login
-    $response = Send-ImapCommand $imap "LOGIN `"$Username`" `"$Password`""
-    if ($response -notmatch "OK") {
-        Write-Log "Echec de l'authentification pour $Username" -Level ERROR
-        throw "IMAP LOGIN failed"
+    # Authentification
+    if ($AuthMethod -eq "oauth2") {
+        # OAuth2 XOAUTH2
+        $accessToken = Get-OAuth2Token -TenantId $TenantId -ClientId $ClientId -ClientSecret $ClientSecret
+        $xoauth2 = Build-XOAuth2String -Username $Username -AccessToken $accessToken
+        $response = Send-ImapCommand $imap "AUTHENTICATE XOAUTH2 $xoauth2"
+        if ($response -notmatch "OK") {
+            Write-Log "Echec de l'authentification OAuth2 pour $Username" -Level ERROR
+            Write-Log "Verifiez : tenant_id, client_id, client_secret, et les permissions Azure AD" -Level ERROR
+            throw "IMAP AUTHENTICATE XOAUTH2 failed"
+        }
+    } else {
+        # Login classique (mot de passe)
+        $response = Send-ImapCommand $imap "LOGIN `"$Username`" `"$Password`""
+        if ($response -notmatch "OK") {
+            Write-Log "Echec de l'authentification pour $Username" -Level ERROR
+            throw "IMAP LOGIN failed"
+        }
     }
     Write-Log "Connexion reussie pour $Username"
 
@@ -479,13 +542,17 @@ function Invoke-Workflow {
     }
 
     # --- Lecture de la config ---
-    $imapServer  = $Config.email.imap_server
-    $imapPort    = [int]($Config.email.imap_port)
-    $useSsl      = ($Config.email.use_ssl -eq "true")
-    $username    = $Config.email.username
-    $password    = $Config.email.password
-    $hpSenders   = ($Config.email.hp_sender -split ',') | ForEach-Object { $_.Trim().ToLower() } | Where-Object { $_ }
-    $mailbox     = if ($Config.email.mailbox) { $Config.email.mailbox } else { "INBOX" }
+    $imapServer    = $Config.email.imap_server
+    $imapPort      = [int]($Config.email.imap_port)
+    $useSsl        = ($Config.email.use_ssl -eq "true")
+    $username      = $Config.email.username
+    $password      = $Config.email.password
+    $authMethod    = if ($Config.email.auth_method) { $Config.email.auth_method.ToLower() } else { "basic" }
+    $tenantId      = $Config.email.tenant_id
+    $clientId      = $Config.email.client_id
+    $clientSecret  = $Config.email.client_secret
+    $hpSenders     = ($Config.email.hp_sender -split ',') | ForEach-Object { $_.Trim().ToLower() } | Where-Object { $_ }
+    $mailbox       = if ($Config.email.mailbox) { $Config.email.mailbox } else { "INBOX" }
 
     $sharePath      = $Config.storage.share_path
     $organizeByDate = ($Config.storage.organize_by_date -eq "true")
@@ -509,7 +576,9 @@ function Invoke-Workflow {
     $imap = $null
     try {
         $imap = Connect-Imap -Server $imapServer -Port $imapPort -UseSsl $useSsl `
-                             -Username $username -Password $password
+                             -Username $username -Password $password `
+                             -AuthMethod $authMethod -TenantId $tenantId `
+                             -ClientId $clientId -ClientSecret $clientSecret
 
         # --- Recherche des mails HP ---
         $msgIds = Search-HpEmails -Imap $imap -Mailbox $mailbox -HpSenders $hpSenders
