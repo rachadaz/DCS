@@ -71,8 +71,10 @@ $action = New-ScheduledTaskAction `
     -WorkingDirectory $InstallDir
 
 $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) `
-    -RepetitionInterval (New-TimeSpan -Minutes $IntervalMinutes) `
-    -RepetitionDuration ([TimeSpan]::MaxValue)
+    -RepetitionInterval (New-TimeSpan -Minutes $IntervalMinutes)
+
+# Forcer la duree de repetition a "indefini" via XML
+$trigger.Repetition.StopAtDurationEnd = $false
 
 $settings = New-ScheduledTaskSettingsSet `
     -AllowStartIfOnBatteries `
