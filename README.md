@@ -1,236 +1,141 @@
-# HP Email Attachment Workflow
+# DCS Copy Workflow
 
-Script **PowerShell natif** qui recupere automatiquement les pieces jointes des emails envoyes par un scanner/imprimante HP et les enregistre sur un partage reseau Windows.
+Copie automatique des fichiers depuis **OneDrive** vers un **share reseau** sur un poste Windows.
 
-**Zero dependance** : tourne avec le PowerShell integre a Windows, rien a installer.
+**Zero dependance** : PowerShell natif, rien a installer.
 
 ## Architecture
 
 ```
-Mail HP (scanner) --> Serveur IMAP --> Script PowerShell --> Share reseau (\\SERVEUR\partage\scans)
-                                            |
-                                   Planificateur de taches (toutes les 5 min)
+OneDrive (compte standard)                        Share reseau (compte admin)
+rachad.yazough@vinci-energies.net                  rachad.yazough_adm@vinci-energies.net
+
+C:\Users\...\OneDrive\Documents\DSC\   --->   \\fr003-pkg-003\01-Sources\_2026\DCS\
+         |                                                |
+         +-- fichier1.pdf                                 +-- fichier1.pdf
+         +-- dossier\fichier2.xlsx                        +-- dossier\fichier2.xlsx
+
+                    Planificateur de taches (toutes les 5 min)
 ```
 
 ## Fichiers
 
 | Fichier | Description |
 |---|---|
-| `hp_email_attachment.ps1` | Script principal |
-| `config.ini.example` | Modele de configuration |
-| `install.ps1` | Script d'installation (cree la tache planifiee) |
-| `uninstall.ps1` | Script de desinstallation |
+| `dcs-copy.ps1` | Script principal de copie |
+| `config.ini` | Configuration (chemins source/destination) |
+| `setup-credentials.ps1` | Enregistre les mots de passe de maniere securisee |
+| `install.ps1` | Installation + tache planifiee |
+| `uninstall.ps1` | Desinstallation |
 
-## Prerequis
+## Installation
 
-- **Windows 10/11** ou **Windows Server 2016+** (PowerShell 5.1 inclus)
-- Acces IMAP a la boite mail recevant les scans HP
-- Acces en ecriture au share reseau (chemin UNC ou lecteur mappe)
+### 1. Ouvrir PowerShell en Administrateur
 
-## Installation rapide
-
-1. Ouvrir **PowerShell en Administrateur**
-2. Se placer dans le dossier du projet :
-   ```powershell
-   cd C:\chemin\vers\DCS
-   ```
-3. Lancer l'installation :
-   ```powershell
-   .\install.ps1
-   ```
-4. Editer la configuration :
-   ```powershell
-   notepad "C:\ProgramData\hp-email-attachment\config.ini"
-   ```
-5. Tester :
-   ```powershell
-   powershell -File "C:\Program Files\hp-email-attachment\hp_email_attachment.ps1" -ConfigPath "C:\ProgramData\hp-email-attachment\config.ini" -DryRun
-   ```
-
-## Configuration Azure AD (Microsoft 365 - OAuth2)
-
-Microsoft 365 n'accepte plus les mots de passe classiques pour IMAP. Il faut enregistrer une application dans **Azure AD (Entra ID)** pour obtenir les `tenant_id`, `client_id` et `client_secret`.
-
-### Etape 1 : Enregistrer l'application
-
-1. Aller sur [portal.azure.com](https://portal.azure.com) > **Microsoft Entra ID** > **Inscriptions d'applications**
-2. Cliquer **Nouvelle inscription**
-   - Nom : `HP Email Attachment Workflow`
-   - Type de compte : **Comptes dans cet annuaire d'organisation uniquement**
-   - Cliquer **Inscrire**
-3. Sur la page de l'application, noter :
-   - **ID d'application (client)** → c'est le `client_id`
-   - **ID de l'annuaire (locataire)** → c'est le `tenant_id`
-
-### Etape 2 : Creer un secret client
-
-1. Dans l'application > **Certificats et secrets** > **Nouveau secret client**
-2. Description : `hp-email-workflow`, Duree : 24 mois
-3. Copier la **Valeur** du secret → c'est le `client_secret`
-
-### Etape 3 : Ajouter les permissions API
-
-1. Dans l'application > **Permissions de l'API** > **Ajouter une autorisation**
-2. Choisir **API que mon organisation utilise** > chercher **Office 365 Exchange Online**
-3. Choisir **Permissions de l'application** > cocher **IMAP.AccessAsApp**
-4. Cliquer **Accorder le consentement administrateur** (bouton en haut)
-
-### Etape 4 : Autoriser l'application sur la boite mail (Exchange Online PowerShell)
+### 2. Configurer les credentials (une seule fois)
 
 ```powershell
-# Installer le module si necessaire
-Install-Module ExchangeOnlineManagement -Force
-
-# Se connecter en tant qu'admin Exchange
-Connect-ExchangeOnline -UserPrincipalName admin@votre-domaine.com
-
-# Creer le service principal (remplacer les valeurs)
-New-ServicePrincipal -AppId "VOTRE_CLIENT_ID" -ServiceId "VOTRE_CLIENT_ID"
-
-# Autoriser l'acces a la boite mail specifique
-Add-MailboxPermission -Identity "scanner@votre-domaine.com" -User "VOTRE_CLIENT_ID" -AccessRights FullAccess
+cd C:\chemin\vers\DCS
+.\setup-credentials.ps1
 ```
 
-### Etape 5 : Remplir le config.ini
+Le script demande le mot de passe du compte admin (`rachad.yazough_adm`) et le stocke de maniere **chiffree** dans le coffre-fort Windows. Les mots de passe ne sont jamais en clair.
 
-```ini
-[email]
-imap_server = outlook.office365.com
-imap_port = 993
-use_ssl = true
-username = scanner@votre-domaine.com
-auth_method = oauth2
-tenant_id = xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-client_id = xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-client_secret = votre-secret-ici
-hp_sender = hp-scanner@votre-domaine.com
-mailbox = INBOX
+### 3. Installer
+
+```powershell
+.\install.ps1
 ```
 
-## Configuration generale
+Le script :
+- Copie les fichiers dans `C:\Program Files\dcs-workflow`
+- Cree une tache planifiee qui tourne toutes les 5 minutes
+- Demande le mot de passe du compte Windows (pour la tache planifiee)
 
-Copier `config.ini.example` en `config.ini` et adapter :
+### 4. Verifier
+
+```powershell
+# Test en mode dry-run (simulation)
+powershell -File "C:\Program Files\dcs-workflow\dcs-copy.ps1" -ConfigPath "C:\ProgramData\dcs-workflow\config.ini" -DryRun
+
+# Verifier la tache planifiee
+Get-ScheduledTask -TaskName "DCS Copy Workflow" | Format-List
+```
+
+## Gestion des credentials
+
+Les deux comptes sont geres differemment :
+
+| Compte | Usage | Comment |
+|---|---|---|
+| `rachad.yazough` | Acces OneDrive (dossier local) | La tache planifiee tourne sous ce compte |
+| `rachad.yazough_adm` | Acces share reseau | Mot de passe stocke chiffre via `setup-credentials.ps1` |
+
+Pour mettre a jour un mot de passe :
+
+```powershell
+# Relancer la configuration des credentials
+.\setup-credentials.ps1
+```
+
+## Configuration
+
+Le fichier `config.ini` contient :
 
 ```ini
-[email]
-imap_server = outlook.office365.com
-imap_port = 993
-use_ssl = true
-username = scanner@votre-domaine.com
-auth_method = oauth2
-tenant_id = xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-client_id = xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-client_secret = votre-secret
-hp_sender = hp-scanner@votre-domaine.com
-mailbox = INBOX
+[source]
+path = C:\Users\rachad.yazough\OneDrive - VINCI Energies\Documents\DSC
 
-[storage]
-share_path = \\SERVEUR\partage\scans
-organize_by_date = true
+[destination]
+path = \\fr003-pkg-003.dom1.vinci-energies.net\01-Sources\_2026\DCS
 
-[processing]
-mark_as_read = true
-move_to_folder = Processed
-allowed_extensions = .pdf, .jpg, .jpeg, .png, .tiff, .tif
+[options]
+extensions =
+delete_after_copy = false
+incremental = true
 
 [logging]
 log_level = INFO
-log_file = C:\ProgramData\hp-email-attachment\hp_email_attachment.log
+log_file = C:\ProgramData\dcs-workflow\dcs_copy.log
 ```
-
-### Parametres cles
 
 | Parametre | Description |
 |---|---|
-| `auth_method` | `oauth2` pour Microsoft 365 (recommande), `basic` pour login/mot de passe |
-| `tenant_id` | ID du tenant Azure AD (voir etape 1 ci-dessus) |
-| `client_id` | ID de l'application Azure AD |
-| `client_secret` | Secret de l'application Azure AD |
-| `username` | Adresse email de la boite qui recoit les scans |
-| `hp_sender` | Adresse(s) email du scanner HP (virgules pour plusieurs) |
-| `share_path` | Chemin UNC (`\\SERVEUR\dossier`) ou lecteur mappe (`S:\scans`) |
-| `allowed_extensions` | Types de fichiers a sauvegarder (vide = tous) |
-| `move_to_folder` | Dossier IMAP ou deplacer les mails traites (vide = ne pas deplacer) |
+| `source.path` | Dossier OneDrive local |
+| `destination.path` | Chemin UNC du share reseau |
+| `extensions` | Filtrer par type de fichier (ex: `.pdf, .xlsx`). Vide = tous |
+| `incremental` | `true` = ne copie que les fichiers nouveaux/modifies |
+| `delete_after_copy` | `true` = supprime le fichier source apres copie reussie |
 
 ## Utilisation
 
 ```powershell
 # Lancer manuellement
-.\hp_email_attachment.ps1
+.\dcs-copy.ps1
 
-# Avec un fichier config specifique
-.\hp_email_attachment.ps1 -ConfigPath "C:\chemin\vers\config.ini"
+# Mode simulation
+.\dcs-copy.ps1 -DryRun
 
-# Mode simulation (dry-run) - aucune modification
-.\hp_email_attachment.ps1 -DryRun
+# Lancer la tache planifiee
+Start-ScheduledTask -TaskName "DCS Copy Workflow"
 
-# Verifier la tache planifiee
-Get-ScheduledTask -TaskName "HP Email Attachment Workflow" | Format-List
-
-# Lancer la tache manuellement
-Start-ScheduledTask -TaskName "HP Email Attachment Workflow"
-
-# Voir les logs en temps reel
-Get-Content "C:\ProgramData\hp-email-attachment\hp_email_attachment.log" -Tail 50 -Wait
-```
-
-## Planificateur de taches
-
-### Via install.ps1 (recommande)
-
-```powershell
-# Par defaut : toutes les 5 minutes
-.\install.ps1
-
-# Personnaliser l'intervalle
-.\install.ps1 -IntervalMinutes 2
-```
-
-### Manuellement (taskschd.msc)
-
-1. Ouvrir le **Planificateur de taches** (`taskschd.msc`)
-2. **Creer une tache...**
-3. General : Nom = `HP Email Attachment Workflow`, Executer meme si l'utilisateur n'est pas connecte
-4. Declencheurs : Repeter toutes les **5 minutes**, indefiniment
-5. Actions :
-   - Programme : `powershell.exe`
-   - Arguments : `-NoProfile -ExecutionPolicy Bypass -File "C:\Program Files\hp-email-attachment\hp_email_attachment.ps1" -ConfigPath "C:\ProgramData\hp-email-attachment\config.ini"`
-6. Conditions : Decocher "sur secteur uniquement"
-
-## Structure des fichiers sauvegardes
-
-Avec `organize_by_date = true` :
-
-```
-\\SERVEUR\partage\scans\
-    2026\
-        02\
-            06\
-                scan_001.pdf
-                scan_002.pdf
-            07\
-                document.pdf
-```
-
-## Desinstallation
-
-```powershell
-# Tout supprimer
-.\uninstall.ps1
-
-# Conserver la configuration
-.\uninstall.ps1 -KeepConfig
+# Voir les logs
+Get-Content "C:\ProgramData\dcs-workflow\dcs_copy.log" -Tail 50 -Wait
 ```
 
 ## Depannage
 
 | Probleme | Solution |
 |---|---|
-| `Connexion refusee` | Verifier `imap_server` et `imap_port`. Tester : `Test-NetConnection imap.serveur.com -Port 993` |
-| `XOAUTH2 failed` | Verifier `tenant_id`, `client_id`, `client_secret`. Verifier les permissions Azure AD et le consentement admin |
-| `Login failed` | Pour O365, utiliser `auth_method = oauth2` (l'auth basique est desactivee). Pour d'autres serveurs, verifier les identifiants |
-| `Share non accessible` | Tester : `Test-Path "\\SERVEUR\partage\scans"`. Verifier les droits reseau |
-| `Aucun mail trouve` | Verifier `hp_sender` (adresse exacte). Mettre `mark_as_read = false` pour tester |
-| `Permission denied` | Verifier que le compte SYSTEM a acces au share, ou changer l'utilisateur de la tache |
-| `Tache ne se lance pas` | `Get-ScheduledTaskInfo -TaskName "HP Email Attachment Workflow"` pour voir le dernier resultat |
-| `Execution policy` | Le script install.ps1 utilise `-ExecutionPolicy Bypass` automatiquement |
+| `Credentials manquants` | Lancer `setup-credentials.ps1` |
+| `Dossier source n'existe pas` | Verifier que OneDrive est synchronise. Ouvrir OneDrive et attendre la synchro |
+| `Connexion au share echouee` | Tester : `net use \\fr003-pkg-003.dom1.vinci-energies.net\01-Sources /user:DOM1\rachad.yazough_adm *` |
+| `Permission denied` | Verifier les droits du compte admin sur le share |
+| `Tache ne tourne pas` | La tache doit tourner sous le compte `rachad.yazough` (pas SYSTEM) pour acceder a OneDrive |
+
+## Desinstallation
+
+```powershell
+.\uninstall.ps1           # Tout supprimer
+.\uninstall.ps1 -KeepConfig  # Conserver la configuration
+```
