@@ -54,8 +54,10 @@ $rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
     "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow"
 )
 $acl.AddAccessRule($rule)
+# Utiliser le SID du groupe Administrators (fonctionne quelle que soit la langue Windows)
+$adminSid = New-Object System.Security.Principal.SecurityIdentifier("S-1-5-32-544")
 $adminRule = New-Object System.Security.AccessControl.FileSystemAccessRule(
-    "BUILTIN\Administrateurs", "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow"
+    $adminSid, "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow"
 )
 $acl.AddAccessRule($adminRule)
 Set-Acl $credDir $acl
